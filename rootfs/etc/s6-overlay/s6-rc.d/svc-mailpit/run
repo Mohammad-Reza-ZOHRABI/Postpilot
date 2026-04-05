@@ -1,0 +1,12 @@
+#!/command/with-contenv sh
+# Build Mailpit arguments — Mailpit also reads MP_* env vars natively
+set -- \
+    --smtp      "0.0.0.0:${MP_SMTP_PORT:-1025}" \
+    --listen    "0.0.0.0:${MP_UI_PORT:-8025}" \
+    --database  "/data/mailpit/mailpit.db" \
+    --max       "${MP_MAX_MESSAGES:-500}"
+
+# Basic auth (file written by configure-all.sh from mailpit_auth secret or MP_UI_AUTH)
+[ -f /run/mailpit-auth ] && set -- "$@" --ui-auth-file /run/mailpit-auth
+
+exec s6-setuidgid mailpit /usr/local/bin/mailpit "$@"

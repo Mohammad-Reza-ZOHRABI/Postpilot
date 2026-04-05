@@ -1,0 +1,2 @@
+#!/command/with-contenv sh
+rm -f /run/opendkim/opendkim.pid /run/opendkim/opendkim.sock 2>/dev/null || true

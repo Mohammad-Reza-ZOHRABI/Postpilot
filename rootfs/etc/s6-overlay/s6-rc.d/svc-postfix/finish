@@ -1,0 +1,3 @@
+#!/command/with-contenv sh
+# Clean Postfix shutdown on service stop (exit code 256 = killed by signal)
+[ "${MAIL_MODE:-catch}" != "catch" ] && postfix stop 2>/dev/null || true

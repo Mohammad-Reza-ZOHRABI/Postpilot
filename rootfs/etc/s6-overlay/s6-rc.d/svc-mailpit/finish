@@ -1,0 +1,2 @@
+#!/command/with-contenv sh
+# Nothing to clean up — Mailpit handles its own shutdown

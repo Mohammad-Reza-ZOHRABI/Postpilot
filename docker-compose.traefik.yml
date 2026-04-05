@@ -1,0 +1,54 @@
+# =============================================================================
+# Mail-Server — Traefik overlay
+# Expose Mailpit web UI via Traefik (HTTPS + Let's Encrypt)
+# SMTP port 1025 stays internal (Docker network only, never exposed)
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.traefik.yml up -d
+#
+# Required in .env:
+#   MAILPIT_DOMAIN=mail.example.com
+#   TRAEFIK_AUTH_USERS=admin:$$2y$$12$$...   (htpasswd bcrypt, $$ escaping)
+# =============================================================================
+
+services:
+  mailserver:
+    # Remove direct port bindings — Traefik handles external access
+    ports: !reset []
+
+    networks:
+      - mail-net
+      - traefik_network
+
+    labels:
+      # ── Traefik service discovery ─────────────────────────────────────────
+      traefik.enable: "true"
+      traefik.docker.network: "${TRAEFIK_NETWORK:-traefik_network}"
+
+      # ── Router: HTTPS ─────────────────────────────────────────────────────
+      traefik.http.routers.mailpit.rule: "Host(`${MAILPIT_DOMAIN:?MAILPIT_DOMAIN is required}`)"
+      traefik.http.routers.mailpit.entrypoints: "${TRAEFIK_ENTRYPOINT:-websecure}"
+      traefik.http.routers.mailpit.tls.certresolver: "${TRAEFIK_CERTRESOLVER:-letsencrypt}"
+      traefik.http.routers.mailpit.service: "mailpit-svc"
+      traefik.http.routers.mailpit.middlewares: "mailpit-headers"
+
+      # ── Service: Pilot UI (port 3000) ──────────────────────────────────────
+      traefik.http.services.mailpit-svc.loadbalancer.server.port: "${PILOT_PORT:-3000}"
+
+      # ── Middleware: Security headers ──────────────────────────────────────
+      traefik.http.middlewares.mailpit-headers.headers.stsSeconds: "31536000"
+      traefik.http.middlewares.mailpit-headers.headers.stsIncludeSubdomains: "true"
+      traefik.http.middlewares.mailpit-headers.headers.forceSTSHeader: "true"
+      traefik.http.middlewares.mailpit-headers.headers.contentTypeNosniff: "true"
+      traefik.http.middlewares.mailpit-headers.headers.browserXssFilter: "true"
+      traefik.http.middlewares.mailpit-headers.headers.frameDeny: "true"
+
+      # ── HTTP → HTTPS redirect ─────────────────────────────────────────────
+      traefik.http.routers.mailpit-http.rule: "Host(`${MAILPIT_DOMAIN}`)"
+      traefik.http.routers.mailpit-http.entrypoints: "web"
+      traefik.http.routers.mailpit-http.middlewares: "${TRAEFIK_REDIRECT_MIDDLEWARE:-redirect-to-https@file}"
+
+networks:
+  traefik_network:
+    external: true
+    name: ${TRAEFIK_NETWORK:-traefik_network}

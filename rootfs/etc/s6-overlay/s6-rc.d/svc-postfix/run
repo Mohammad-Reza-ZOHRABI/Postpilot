@@ -1,0 +1,10 @@
+#!/command/with-contenv sh
+# Skip in catch mode — sleep without consuming CPU
+case "${MAIL_MODE:-catch}" in
+    catch)
+        exec sleep infinity
+        ;;
+    *)
+        exec postfix start-fg
+        ;;
+esac

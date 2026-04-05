@@ -1,0 +1,63 @@
+services:
+  mailserver:
+    image: ${MAILSERVER_IMAGE:-rezozohrabi/postpilot:latest}
+    container_name: ${MAILSERVER_CONTAINER_NAME:-mailserver}
+    restart: unless-stopped
+
+    environment:
+      MAIL_MODE: ${MAIL_MODE:-catch}
+      POSTFIX_HOSTNAME: ${POSTFIX_HOSTNAME:-mail.local}
+      POSTFIX_MYORIGIN: ${POSTFIX_MYORIGIN:-mail.local}
+      POSTFIX_RELAY_HOST: ${POSTFIX_RELAY_HOST:-}
+      POSTFIX_RELAY_USER: ${POSTFIX_RELAY_USER:-}
+      POSTFIX_MESSAGE_SIZE: ${POSTFIX_MESSAGE_SIZE:-52428800}
+      POSTFIX_MYNETWORKS: ${POSTFIX_MYNETWORKS:-127.0.0.0/8}
+      DKIM_ENABLED: ${DKIM_ENABLED:-false}
+      DKIM_DOMAIN: ${DKIM_DOMAIN:-}
+      DKIM_SELECTOR: ${DKIM_SELECTOR:-default}
+      DKIM_KEY_SIZE: ${DKIM_KEY_SIZE:-2048}
+      DKIM_PRIVATE_KEY_B64: ${DKIM_PRIVATE_KEY_B64:-}
+      TLS_ENABLED: ${TLS_ENABLED:-false}
+      MP_MAX_MESSAGES: ${MP_MAX_MESSAGES:-500}
+      MP_SMTP_PORT: ${MP_SMTP_PORT:-1025}
+      MP_UI_PORT: ${MP_UI_PORT:-8025}
+
+    volumes:
+      - mailpit-data:/data/mailpit
+      - pilot-data:/data/postpilot
+
+    # read_only: true is NOT used because configure-all.sh writes generated
+    # configs to /etc/postfix/main.cf and /var/lib/opendkim/ at startup.
+    # /run is NOT tmpfs: s6-overlay v3 unpacks init binaries into /run/s6/basedir/
+    # and Docker's default tmpfs is noexec, which would prevent their execution.
+    tmpfs:
+      - /tmp:mode=1777
+
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID      # s6-setuidgid: switch to mailpit/opendkim users
+      - SETGID      # s6-setuidgid: set supplementary groups
+      - CHOWN       # Postfix/OpenDKIM queue directory ownership
+      - DAC_OVERRIDE # Postfix master: access postfix-owned spool dirs (private/ public/ data/)
+
+    deploy:
+      resources:
+        limits:
+          memory: ${MAILSERVER_MEMORY_LIMIT:-128M}
+          cpus: "${MAILSERVER_CPU_LIMIT:-0.25}"
+
+    networks:
+      - mail-net
+
+volumes:
+  mailpit-data:
+    driver: local
+  pilot-data:
+    driver: local
+
+networks:
+  mail-net:
+    name: mail-net

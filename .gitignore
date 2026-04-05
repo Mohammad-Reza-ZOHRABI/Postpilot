@@ -1,0 +1,28 @@
+# ── Secrets & credentials ─────────────────────────────────────────────────────
+.env
+.env.*
+!.env.example
+.secrets/
+
+# ── Local Docker build artifacts ──────────────────────────────────────────────
+*.tar
+*.tar.gz
+
+# ── Editor & OS ───────────────────────────────────────────────────────────────
+.DS_Store
+Thumbs.db
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# ── Node.js ──────────────────────────────────────────────────────────────────
+pilot/ui/node_modules/
+pilot/ui/dist/
+
+# ── Go ───────────────────────────────────────────────────────────────────────
+pilot/web/dist/
+
+# ── Generated at runtime ─────────────────────────────────────────────────────
+rootfs/etc/postfix/main.cf
+rootfs/etc/opendkim.conf

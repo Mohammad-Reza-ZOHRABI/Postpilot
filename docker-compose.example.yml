@@ -1,0 +1,117 @@
+# =============================================================================
+# Mail-Server — docker-compose example (hardened)
+# Copy this file, rename to docker-compose.yml, and adjust to your needs.
+# =============================================================================
+
+services:
+  mailserver:
+    image: ${MAILSERVER_IMAGE:-rezozohrabi/postpilot:latest}
+    container_name: ${MAILSERVER_CONTAINER_NAME:-mailserver}
+    restart: unless-stopped
+
+    # ── Mode ──────────────────────────────────────────────────────────────────
+    # MAIL_MODE=catch   → Mailpit only, nothing sent (default, safe for dev)
+    # MAIL_MODE=relay   → Mailpit → Postfix → external SMTP relay
+    # MAIL_MODE=direct  → Mailpit → Postfix → MX records directly
+    environment:
+      MAIL_MODE: ${MAIL_MODE:-catch}
+      POSTFIX_HOSTNAME: ${POSTFIX_HOSTNAME:-mail.example.com}
+      POSTFIX_MYORIGIN: ${POSTFIX_MYORIGIN:-example.com}
+      POSTFIX_RELAY_HOST: ${POSTFIX_RELAY_HOST:-}
+      POSTFIX_RELAY_USER: ${POSTFIX_RELAY_USER:-}
+      POSTFIX_MESSAGE_SIZE: ${POSTFIX_MESSAGE_SIZE:-52428800}
+      POSTFIX_MYNETWORKS: ${POSTFIX_MYNETWORKS:-127.0.0.0/8}
+      DKIM_ENABLED: ${DKIM_ENABLED:-false}
+      DKIM_DOMAIN: ${DKIM_DOMAIN:-}
+      DKIM_SELECTOR: ${DKIM_SELECTOR:-default}
+      DKIM_KEY_SIZE: ${DKIM_KEY_SIZE:-2048}
+      TLS_ENABLED: ${TLS_ENABLED:-false}
+      MP_MAX_MESSAGES: ${MP_MAX_MESSAGES:-500}
+      MP_SMTP_PORT: ${MP_SMTP_PORT:-1025}
+      MP_UI_PORT: ${MP_UI_PORT:-8025}
+
+    # ── Docker secrets (recommended for sensitive values) ─────────────────────
+    secrets:
+      - smtp_relay_password   # Postfix relay password
+      - dkim_private_key      # DKIM private key (base64-encoded)
+      - tls_cert              # TLS certificate (base64-encoded, optional)
+      - tls_key               # TLS key (base64-encoded, optional)
+      - mailpit_auth          # Mailpit UI auth: "user:$2y$..." (bcrypt)
+
+    # ── Ports ─────────────────────────────────────────────────────────────────
+    # SMTP stays internal (Docker network only — never exposed externally)
+    # For web UI: use docker-compose.traefik.yml overlay instead of exposing here
+    # ports:
+    #   - "127.0.0.1:1025:1025"   # Only if you need SMTP from outside Docker
+    #   - "127.0.0.1:8025:8025"   # Only for local dev without Traefik
+
+    # ── Persistent data ───────────────────────────────────────────────────────
+    volumes:
+      - mailpit-data:/data/mailpit
+      - pilot-data:/data/postpilot
+
+    # ── Hardening ─────────────────────────────────────────────────────────────
+    security_opt:
+      - no-new-privileges:true
+    cap_drop:
+      - ALL
+    cap_add:
+      - SETUID      # s6-setuidgid: switch to mailpit/opendkim users
+      - SETGID      # s6-setuidgid: set supplementary groups
+      - CHOWN       # Postfix/OpenDKIM queue directory ownership
+      - DAC_OVERRIDE # Postfix master: access postfix-owned spool dirs
+    # Note: read_only: true is not used because configure-all.sh generates
+    # /etc/postfix/main.cf and /var/lib/opendkim/ at startup.
+    # /run is NOT tmpfs: s6-overlay v3 unpacks init binaries into /run/s6/basedir/
+    # and Docker's default tmpfs is noexec, which would prevent their execution.
+    tmpfs:
+      - /tmp:mode=1777
+
+    # ── Resource limits (adjust for your VPS) ────────────────────────────────
+    deploy:
+      resources:
+        limits:
+          memory: ${MAILSERVER_MEMORY_LIMIT:-128M}
+          cpus: "${MAILSERVER_CPU_LIMIT:-0.25}"
+
+    # ── Health ────────────────────────────────────────────────────────────────
+    # mailpit readyz is auth-agnostic (works with or without --ui-auth-file)
+    healthcheck:
+      test: ["CMD", "sh", "-c",
+        "/usr/local/bin/mailpit readyz \
+         && { [ \"${MAIL_MODE:-catch}\" = \"catch\" ] || postfix status > /dev/null 2>&1; }"]
+      interval: 15s
+      timeout: 5s
+      retries: 5
+      start_period: 15s
+
+    networks:
+      - mail-net
+
+# =============================================================================
+# Secrets — use files in production
+# =============================================================================
+secrets:
+  smtp_relay_password:
+    file: ./.secrets/smtp_relay_password   # echo -n "yourpassword" > .secrets/smtp_relay_password
+  dkim_private_key:
+    file: ./.secrets/dkim_private_key      # base64-encoded PEM private key
+  tls_cert:
+    file: ./.secrets/tls_cert              # base64-encoded certificate
+  tls_key:
+    file: ./.secrets/tls_key               # base64-encoded private key
+  mailpit_auth:
+    file: ./.secrets/mailpit_auth          # user:$2y$hash (htpasswd bcrypt)
+
+# =============================================================================
+# Volumes & networks
+# =============================================================================
+volumes:
+  mailpit-data:
+    driver: local
+  pilot-data:
+    driver: local
+
+networks:
+  mail-net:
+    name: mail-net
