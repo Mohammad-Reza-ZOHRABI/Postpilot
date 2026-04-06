@@ -29,11 +29,12 @@ func NewJWTManager(secret []byte, expiry time.Duration) *JWTManager {
 
 // Issue creates a signed JWT for the given user ID and email.
 // The token contains sub (userID as string), email, exp, and iat claims.
-func (j *JWTManager) Issue(userID int64, email string) (string, error) {
+func (j *JWTManager) Issue(userID int64, email, role string) (string, error) {
 	now := time.Now()
 	claims := jwt.MapClaims{
 		"sub":   strconv.FormatInt(userID, 10),
 		"email": email,
+		"role":  role,
 		"iat":   now.Unix(),
 		"exp":   now.Add(j.expiry).Unix(),
 	}
@@ -46,6 +47,7 @@ func (j *JWTManager) Issue(userID int64, email string) (string, error) {
 type Claims struct {
 	UserID int64
 	Email  string
+	Role   string
 }
 
 // Validate parses and validates a JWT token string.
@@ -80,8 +82,14 @@ func (j *JWTManager) Validate(tokenStr string) (*Claims, error) {
 		return nil, ErrInvalidToken
 	}
 
+	role, _ := mapClaims["role"].(string)
+	if role == "" {
+		role = "admin"
+	}
+
 	return &Claims{
 		UserID: userID,
 		Email:  email,
+		Role:   role,
 	}, nil
 }

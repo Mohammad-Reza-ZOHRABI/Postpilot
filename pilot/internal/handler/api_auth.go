@@ -22,12 +22,16 @@ func (h *Handler) APIAuthCheck(w http.ResponseWriter, r *http.Request) {
 	}
 
 	hasUsers, _ := h.DB.HasUsers()
-	loggedIn := h.authenticateFromCookie(r) != nil
+	claims := h.authenticateFromCookie(r)
 
-	h.jsonOK(w, map[string]bool{
+	resp := map[string]any{
 		"setup_needed": !hasUsers,
-		"logged_in":    loggedIn,
-	})
+		"logged_in":    claims != nil,
+	}
+	if claims != nil {
+		resp["role"] = claims.Role
+	}
+	h.jsonOK(w, resp)
 }
 
 // setupRequest represents the JSON body for the setup endpoint.
@@ -119,7 +123,7 @@ func (h *Handler) APISetup(w http.ResponseWriter, r *http.Request) {
 			return
 		}
 
-		if err := h.DB.CreateUser(email, hash, totpSecret); err != nil {
+		if err := h.DB.CreateUser(email, hash, totpSecret, "admin"); err != nil {
 			h.jsonError(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
 			return
 		}
@@ -186,7 +190,7 @@ func (h *Handler) APILogin(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	token, err := h.JWT.Issue(user.ID, user.Email)
+	token, err := h.JWT.Issue(user.ID, user.Email, user.Role)
 	if err != nil {
 		h.jsonError(w, "Internal error", http.StatusInternalServerError)
 		return

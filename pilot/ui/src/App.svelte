@@ -2,6 +2,7 @@
   import { onMount } from 'svelte';
   import { route, navigate } from './lib/router.js';
   import { api } from './lib/api.js';
+  import './lib/theme.js';
   import Nav from './components/Nav.svelte';
   import Login from './pages/Login.svelte';
   import Setup from './pages/Setup.svelte';
@@ -9,10 +10,12 @@
   import Settings from './pages/Settings.svelte';
   import ApiKeys from './pages/ApiKeys.svelte';
   import Dns from './pages/Dns.svelte';
+  import Users from './pages/Users.svelte';
 
   let ready = false;
   let loggedIn = false;
   let mode = '';
+  let role = '';
 
   onMount(async () => {
     try {
@@ -23,6 +26,7 @@
         navigate('/login');
       } else {
         loggedIn = true;
+        role = data.role || 'admin';
       }
     } catch (e) {
       navigate('/login');
@@ -33,33 +37,21 @@
 
   $: currentRoute = $route;
   $: showNav = loggedIn && currentRoute !== '/login' && currentRoute !== '/setup';
-
-  // Track login state from route changes
-  $: if (currentRoute === '/login' || currentRoute === '/setup') {
-    loggedIn = false;
-  }
-
-  // After navigating away from login/setup, assume logged in
-  $: if (ready && currentRoute !== '/login' && currentRoute !== '/setup' && currentRoute !== '') {
-    loggedIn = true;
-  }
-
-  // Load mode for nav display
+  $: if (currentRoute === '/login' || currentRoute === '/setup') loggedIn = false;
+  $: if (ready && currentRoute !== '/login' && currentRoute !== '/setup' && currentRoute !== '') loggedIn = true;
   $: if (loggedIn && !mode) {
-    api.getSettings().then(d => {
-      mode = d.settings?.mail_mode || '';
-    }).catch(() => {});
+    api.getSettings().then(d => { mode = d.settings?.mail_mode || ''; }).catch(() => {});
   }
 </script>
 
-<div class="min-h-screen bg-zinc-950 text-zinc-100">
+<div class="min-h-screen" style="background:var(--bg);color:var(--text)">
   {#if !ready}
     <div class="flex h-screen items-center justify-center">
-      <p class="text-sm text-zinc-500">Loading...</p>
+      <p class="text-sm" style="color:var(--muted)">Loading...</p>
     </div>
   {:else}
     {#if showNav}
-      <Nav {currentRoute} {mode} />
+      <Nav {currentRoute} {mode} {role} />
     {/if}
 
     {#if currentRoute === '/login'}
@@ -72,6 +64,8 @@
       <ApiKeys />
     {:else if currentRoute === '/dns'}
       <Dns />
+    {:else if currentRoute === '/users'}
+      <Users />
     {:else}
       <Dashboard />
     {/if}

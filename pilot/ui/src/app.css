@@ -1,3 +1,37 @@
 @tailwind base;
 @tailwind components;
 @tailwind utilities;
+
+:root, [data-theme="light"] {
+  --bg: #ffffff;
+  --surface: #f4f4f5;
+  --card: #ffffff;
+  --input: #f4f4f5;
+  --border: #e4e4e7;
+  --border-h: #d4d4d8;
+  --text: #18181b;
+  --text2: #3f3f46;
+  --muted: #71717a;
+  --placeholder: #a1a1aa;
+  --accent: #7c3aed;
+  --accent-h: #6d28d9;
+  --accent-t: #ffffff;
+  --accent-soft: rgba(124, 58, 237, 0.08);
+}
+
+[data-theme="dark"] {
+  --bg: #09090b;
+  --surface: #18181b;
+  --card: #18181b;
+  --input: #27272a;
+  --border: #27272a;
+  --border-h: #3f3f46;
+  --text: #fafafa;
+  --text2: #a1a1aa;
+  --muted: #71717a;
+  --placeholder: #52525b;
+  --accent: #a78bfa;
+  --accent-h: #c4b5fd;
+  --accent-t: #000000;
+  --accent-soft: rgba(167, 139, 250, 0.1);
+}

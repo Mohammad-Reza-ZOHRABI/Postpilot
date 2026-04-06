@@ -107,6 +107,7 @@ RUN mkdir -p /data/mailpit /data/postpilot /run/opendkim /var/lib/opendkim \
  && chown root:opendkim /var/lib/opendkim && chmod 0775 /var/lib/opendkim \
  && chown opendkim:opendkim /run/opendkim \
  && chmod 0750 /etc/postfix/sasl /etc/postfix/tls \
+ && chown root:pilot /etc/postfix/main.cf && chmod 0664 /etc/postfix/main.cf \
  && find /etc/s6-overlay -type f \( -name "run" -o -name "finish" -o -name "up" -o -name "down" \) \
       -exec chmod 0755 {} + \
  && find /etc/s6-overlay/scripts -type f -exec chmod 0755 {} +

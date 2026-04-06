@@ -44,6 +44,12 @@ export const api = {
   // DNS
   checkDns: (domain) => request('POST', '/dns/check', { domain }),
 
+  // Users
+  listUsers: () => request('GET', '/users'),
+  createUser: (email, password, role) => request('POST', '/users', { email, password, role }),
+  deleteUser: (id) => request('POST', `/users/${id}/delete`),
+  updateUserRole: (id, role) => request('POST', `/users/${id}/role`, { role }),
+
   // Send (public API)
   health: () => request('GET', '/health'),
 };

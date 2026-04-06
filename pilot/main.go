@@ -95,6 +95,31 @@ func main() {
 	mux.Handle("/api/v1/keys/", requireAuth(http.HandlerFunc(h.APIRevokeKey)))
 	mux.Handle("/api/v1/dns/check", requireAuth(http.HandlerFunc(h.APIDNSCheck)))
 
+	// ---------- User management routes ----------
+	mux.Handle("/api/v1/users", requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		switch r.Method {
+		case http.MethodGet:
+			h.APIListUsers(w, r)
+		case http.MethodPost:
+			h.APICreateUser(w, r)
+		default:
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusMethodNotAllowed)
+			fmt.Fprintf(w, `{"error":"Method not allowed"}`)
+		}
+	})))
+	mux.Handle("/api/v1/users/", requireAuth(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if strings.HasSuffix(r.URL.Path, "/delete") {
+			h.APIDeleteUser(w, r)
+		} else if strings.HasSuffix(r.URL.Path, "/role") {
+			h.APIUpdateUserRole(w, r)
+		} else {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusNotFound)
+			fmt.Fprintf(w, `{"error":"Not found"}`)
+		}
+	})))
+
 	// ---------- SPA handler ----------
 	mux.Handle("/", spaHandler())
 

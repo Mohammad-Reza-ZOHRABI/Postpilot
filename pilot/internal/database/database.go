@@ -13,45 +13,46 @@ import (
 // ---------- Types ----------
 
 type User struct {
-	ID           int64
-	Email        string
-	PasswordHash string
-	TOTPSecret   string
-	TOTPVerified bool
-	CreatedAt    time.Time
+	ID           int64      `json:"id"`
+	Email        string     `json:"email"`
+	PasswordHash string     `json:"-"`
+	TOTPSecret   string     `json:"-"`
+	TOTPVerified bool       `json:"totp_verified"`
+	Role         string     `json:"role"`
+	CreatedAt    time.Time  `json:"created_at"`
 }
 
 type APIKey struct {
-	ID          int64
-	Name        string
-	KeyHash     string
-	KeyPrefix   string
-	Permissions string
-	RateLimit   int
-	LastUsedAt  *time.Time
-	CallCount   int64
-	CreatedAt   time.Time
-	RevokedAt   *time.Time
+	ID          int64      `json:"id"`
+	Name        string     `json:"name"`
+	KeyHash     string     `json:"-"`
+	KeyPrefix   string     `json:"key_prefix"`
+	Permissions string     `json:"permissions"`
+	RateLimit   int        `json:"rate_limit"`
+	LastUsedAt  *time.Time `json:"last_used_at"`
+	CallCount   int64      `json:"call_count"`
+	CreatedAt   time.Time  `json:"created_at"`
+	RevokedAt   *time.Time `json:"revoked_at"`
 }
 
 type EmailLog struct {
-	ID             int64
-	APIKeyID       *int64
-	FromAddr       string
-	ToAddr         string
-	Subject        string
-	Status         string
-	PostfixQueueID string
-	ErrorMsg       string
-	CreatedAt      time.Time
+	ID             int64      `json:"id"`
+	APIKeyID       *int64     `json:"api_key_id"`
+	FromAddr       string     `json:"from_addr"`
+	ToAddr         string     `json:"to_addr"`
+	Subject        string     `json:"subject"`
+	Status         string     `json:"status"`
+	PostfixQueueID string     `json:"postfix_queue_id"`
+	ErrorMsg       string     `json:"error_msg"`
+	CreatedAt      time.Time  `json:"created_at"`
 }
 
 type EmailStats struct {
-	Sent24h   int
-	Sent7d    int
-	Sent30d   int
-	Failed24h int
-	Queued    int
+	Sent24h   int `json:"sent_24h"`
+	Sent7d    int `json:"sent_7d"`
+	Sent30d   int `json:"sent_30d"`
+	Failed24h int `json:"failed_24h"`
+	Queued    int `json:"queued"`
 }
 
 // ---------- DB handle ----------
@@ -156,8 +157,11 @@ func (d *DB) migrate() error {
 			return fmt.Errorf("database: migrate: %w", err)
 		}
 	}
+	// Add role column if missing (migration for existing DBs)
+	d.db.Exec("ALTER TABLE users ADD COLUMN role TEXT NOT NULL DEFAULT 'admin'")
 	return nil
 }
+
 
 // ========== Users ==========
 
@@ -169,10 +173,13 @@ func (d *DB) HasUsers() (bool, error) {
 }
 
 // CreateUser inserts a new user row.
-func (d *DB) CreateUser(email, passwordHash, totpSecret string) error {
+func (d *DB) CreateUser(email, passwordHash, totpSecret, role string) error {
+	if role == "" {
+		role = "admin"
+	}
 	_, err := d.db.Exec(
-		"INSERT INTO users (email, password_hash, totp_secret) VALUES (?, ?, ?)",
-		email, passwordHash, totpSecret,
+		"INSERT INTO users (email, password_hash, totp_secret, role) VALUES (?, ?, ?, ?)",
+		email, passwordHash, totpSecret, role,
 	)
 	return err
 }
@@ -181,13 +188,43 @@ func (d *DB) CreateUser(email, passwordHash, totpSecret string) error {
 func (d *DB) GetUserByEmail(email string) (*User, error) {
 	u := &User{}
 	err := d.db.QueryRow(
-		"SELECT id, email, password_hash, totp_secret, totp_verified, created_at FROM users WHERE email = ?",
+		"SELECT id, email, password_hash, totp_secret, totp_verified, role, created_at FROM users WHERE email = ?",
 		email,
-	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.TOTPSecret, &u.TOTPVerified, &u.CreatedAt)
+	).Scan(&u.ID, &u.Email, &u.PasswordHash, &u.TOTPSecret, &u.TOTPVerified, &u.Role, &u.CreatedAt)
 	if err == sql.ErrNoRows {
 		return nil, nil
 	}
 	return u, err
+}
+
+// ListUsers returns all users.
+func (d *DB) ListUsers() ([]User, error) {
+	rows, err := d.db.Query("SELECT id, email, role, totp_verified, created_at FROM users ORDER BY id")
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var users []User
+	for rows.Next() {
+		var u User
+		if err := rows.Scan(&u.ID, &u.Email, &u.Role, &u.TOTPVerified, &u.CreatedAt); err != nil {
+			return nil, err
+		}
+		users = append(users, u)
+	}
+	return users, nil
+}
+
+// DeleteUser removes a user by ID.
+func (d *DB) DeleteUser(id int64) error {
+	_, err := d.db.Exec("DELETE FROM users WHERE id = ?", id)
+	return err
+}
+
+// UpdateUserRole changes a user's role.
+func (d *DB) UpdateUserRole(id int64, role string) error {
+	_, err := d.db.Exec("UPDATE users SET role = ? WHERE id = ?", role, id)
+	return err
 }
 
 // SetTOTPVerified marks the user's TOTP as verified.
