@@ -201,12 +201,16 @@ func (h *Handler) APILogin(w http.ResponseWriter, r *http.Request) {
 	_ = h.DB.RecordLoginAttempt(ip, true)
 	h.Limiter.Reset(ip)
 
+	// Secure: true is mandatory because Postpilot is documented as
+	// "must be deployed behind a trusted TLS-terminating reverse proxy"
+	// (see SECURITY.md). r.TLS is always nil in that setup since the
+	// proxy strips TLS, so a runtime check would defeat the purpose.
 	http.SetCookie(w, &http.Cookie{
 		Name:     "session",
 		Value:    token,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   r.TLS != nil,
+		Secure:   true,
 		SameSite: http.SameSiteStrictMode,
 		MaxAge:   int(24 * time.Hour / time.Second),
 	})
@@ -226,6 +230,8 @@ func (h *Handler) APILogout(w http.ResponseWriter, r *http.Request) {
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   true,
+		SameSite: http.SameSiteStrictMode,
 		MaxAge:   -1,
 	})
 

@@ -47,14 +47,25 @@ func (c *Client) Send(msg *Message) error {
 	return smtp.SendMail(addr, nil, msg.From, msg.To, []byte(body))
 }
 
+// stripCRLF removes CR and LF bytes from a header value to prevent
+// SMTP header injection (CWE-93). Without this, an attacker who controls
+// any header field can inject additional headers like Bcc:.
+func stripCRLF(s string) string {
+	return strings.NewReplacer("\r", "", "\n", "").Replace(s)
+}
+
 func buildMessage(msg *Message) string {
 	var b strings.Builder
 
-	b.WriteString("From: " + msg.From + "\r\n")
-	b.WriteString("To: " + strings.Join(msg.To, ", ") + "\r\n")
-	b.WriteString("Subject: " + msg.Subject + "\r\n")
+	b.WriteString("From: " + stripCRLF(msg.From) + "\r\n")
+	to := make([]string, len(msg.To))
+	for i, addr := range msg.To {
+		to[i] = stripCRLF(addr)
+	}
+	b.WriteString("To: " + strings.Join(to, ", ") + "\r\n")
+	b.WriteString("Subject: " + stripCRLF(msg.Subject) + "\r\n")
 	if msg.ReplyTo != "" {
-		b.WriteString("Reply-To: " + msg.ReplyTo + "\r\n")
+		b.WriteString("Reply-To: " + stripCRLF(msg.ReplyTo) + "\r\n")
 	}
 	b.WriteString("MIME-Version: 1.0\r\n")
 
