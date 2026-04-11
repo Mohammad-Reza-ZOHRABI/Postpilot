@@ -44,7 +44,7 @@ RUN apk add --no-cache wget \
 # =============================================================================
 # Stage 3: Build Svelte UI
 # =============================================================================
-FROM node:22-alpine AS ui-build
+FROM node:25-alpine AS ui-build
 
 WORKDIR /ui
 COPY pilot/ui/package*.json ./
