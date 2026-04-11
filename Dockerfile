@@ -7,7 +7,7 @@
 # =============================================================================
 # Stage 1: Download s6-overlay (multi-arch)
 # =============================================================================
-FROM alpine:3.21 AS s6-download
+FROM alpine:3.23 AS s6-download
 
 ARG S6_VERSION=3.2.0.2
 ARG TARGETARCH
@@ -26,7 +26,7 @@ RUN apk add --no-cache wget xz \
 # =============================================================================
 # Stage 2: Download Mailpit static binary (multi-arch)
 # =============================================================================
-FROM alpine:3.21 AS mailpit-download
+FROM alpine:3.23 AS mailpit-download
 
 ARG MAILPIT_VERSION=1.21.5
 ARG TARGETARCH
@@ -74,7 +74,7 @@ RUN go mod tidy \
 # =============================================================================
 # Stage 5: Production image
 # =============================================================================
-FROM alpine:3.21
+FROM alpine:3.23
 
 ARG S6_VERSION=3.2.0.2
 ARG MAILPIT_VERSION=1.21.5
