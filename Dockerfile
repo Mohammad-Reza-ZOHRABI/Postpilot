@@ -1,13 +1,13 @@
 # =============================================================================
 # Postpilot — Hardened single-container image
 # Pilot UI (Svelte) + Mailpit (SMTP) + Postfix (MTA) + OpenDKIM (DKIM)
-# Managed by s6-overlay · Base: Alpine 3.21
+# Managed by s6-overlay · Base: Alpine 3.23
 # =============================================================================
 
 # =============================================================================
 # Stage 1: Download s6-overlay (multi-arch)
 # =============================================================================
-FROM alpine:3.21 AS s6-download
+FROM alpine:3.23 AS s6-download
 
 ARG S6_VERSION=3.2.0.2
 ARG TARGETARCH
@@ -26,7 +26,7 @@ RUN apk add --no-cache wget xz \
 # =============================================================================
 # Stage 2: Download Mailpit static binary (multi-arch)
 # =============================================================================
-FROM alpine:3.21 AS mailpit-download
+FROM alpine:3.23 AS mailpit-download
 
 ARG MAILPIT_VERSION=1.21.5
 ARG TARGETARCH
@@ -44,7 +44,7 @@ RUN apk add --no-cache wget \
 # =============================================================================
 # Stage 3: Build Svelte UI
 # =============================================================================
-FROM node:22-alpine AS ui-build
+FROM node:25-alpine AS ui-build
 
 WORKDIR /ui
 COPY pilot/ui/package*.json ./
@@ -55,7 +55,7 @@ RUN npm run build
 # =============================================================================
 # Stage 4: Build Pilot backend (Go static binary)
 # =============================================================================
-FROM golang:1.25-alpine AS pilot-build
+FROM golang:1.26-alpine AS pilot-build
 
 WORKDIR /build
 COPY pilot/ ./
@@ -74,7 +74,7 @@ RUN go mod tidy \
 # =============================================================================
 # Stage 5: Production image
 # =============================================================================
-FROM alpine:3.21
+FROM alpine:3.23
 
 ARG S6_VERSION=3.2.0.2
 ARG MAILPIT_VERSION=1.21.5
