@@ -55,7 +55,7 @@ RUN npm run build
 # =============================================================================
 # Stage 4: Build Pilot backend (Go static binary)
 # =============================================================================
-FROM golang:1.25-alpine AS pilot-build
+FROM golang:1.26-alpine AS pilot-build
 
 WORKDIR /build
 COPY pilot/ ./
