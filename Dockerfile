@@ -55,13 +55,21 @@ RUN npm run build
 # =============================================================================
 # Stage 4: Build Pilot backend (Go static binary)
 # =============================================================================
-FROM golang:1.23-alpine AS pilot-build
+FROM golang:1.25-alpine AS pilot-build
 
 WORKDIR /build
 COPY pilot/ ./
 # Copy built Svelte UI into web/dist/ for Go embed
 COPY --from=ui-build /ui/dist ./web/dist/
-RUN go mod tidy && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -trimpath -o /pilot .
+# Resolve dependencies, scan for known Go CVEs, then build a static binary.
+# govulncheck will fail the build if any direct or transitive Go dependency
+# has a known vulnerability reachable from the code. To bypass temporarily
+# during a CVE disclosure window, replace `govulncheck ./...` with
+# `govulncheck ./... || true` (not recommended for long).
+RUN go mod tidy \
+ && go install golang.org/x/vuln/cmd/govulncheck@latest \
+ && govulncheck ./... \
+ && CGO_ENABLED=0 GOOS=linux go build -ldflags="-s -w" -trimpath -o /pilot .
 
 # =============================================================================
 # Stage 5: Production image

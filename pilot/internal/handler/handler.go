@@ -11,19 +11,27 @@ import (
 
 // Handler holds shared dependencies for all HTTP handlers.
 type Handler struct {
-	DB      *database.DB
-	JWT     *auth.JWTManager
-	Mail    *mail.Client
-	Limiter *auth.RateLimiter
+	DB            *database.DB
+	JWT           *auth.JWTManager
+	Mail          *mail.Client
+	Limiter       *auth.RateLimiter       // per-IP (used for login)
+	APIKeyLimiter *auth.APIKeyRateLimiter // per-key (used for /send, /status)
 }
 
 // New creates a Handler.
-func New(db *database.DB, jwt *auth.JWTManager, mailer *mail.Client, limiter *auth.RateLimiter) *Handler {
+func New(
+	db *database.DB,
+	jwt *auth.JWTManager,
+	mailer *mail.Client,
+	limiter *auth.RateLimiter,
+	apiKeyLimiter *auth.APIKeyRateLimiter,
+) *Handler {
 	return &Handler{
-		DB:      db,
-		JWT:     jwt,
-		Mail:    mailer,
-		Limiter: limiter,
+		DB:            db,
+		JWT:           jwt,
+		Mail:          mailer,
+		Limiter:       limiter,
+		APIKeyLimiter: apiKeyLimiter,
 	}
 }
 

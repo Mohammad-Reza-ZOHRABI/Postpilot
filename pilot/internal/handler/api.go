@@ -2,7 +2,9 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
+	stdmail "net/mail"
 
 	"github.com/Mohammad-Reza-ZOHRABI/Postpilot/pilot/internal/config"
 	"github.com/Mohammad-Reza-ZOHRABI/Postpilot/pilot/internal/mail"
@@ -30,9 +32,16 @@ func (h *Handler) APISend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	keyID, err := h.ValidateAPIKey(r)
+	apiKey, err := h.ValidateAPIKey(r)
 	if err != nil {
-		h.jsonError(w, err.Error(), http.StatusUnauthorized)
+		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+
+	// Per-API-key rate limit (configured in the api_keys table).
+	if h.APIKeyLimiter != nil && !h.APIKeyLimiter.Allow(apiKey.ID, apiKey.RateLimit) {
+		w.Header().Set("Retry-After", "60")
+		h.jsonError(w, "Rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
 
@@ -52,7 +61,31 @@ func (h *Handler) APISend(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Validate email addresses via net/mail.
+	if _, err := stdmail.ParseAddress(req.From); err != nil {
+		h.jsonError(w, "Invalid From address", http.StatusBadRequest)
+		return
+	}
+	for _, addr := range req.To {
+		if _, err := stdmail.ParseAddress(addr); err != nil {
+			h.jsonError(w, "Invalid To address", http.StatusBadRequest)
+			return
+		}
+	}
+	if req.ReplyTo != "" {
+		if _, err := stdmail.ParseAddress(req.ReplyTo); err != nil {
+			h.jsonError(w, "Invalid Reply-To address", http.StatusBadRequest)
+			return
+		}
+	}
+
+	// Defense-in-depth: strip dangerous markup from HTML bodies.
+	if req.HTML != "" {
+		req.HTML = mail.SanitizeHTML(req.HTML)
+	}
+
 	// Log the email
+	keyID := apiKey.ID
 	logID, _ := h.DB.LogEmail(&keyID, req.From, req.To[0], req.Subject, "queued")
 
 	// Send via SMTP
@@ -66,8 +99,9 @@ func (h *Handler) APISend(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.Mail.Send(msg); err != nil {
+		log.Printf("mail.Send failed (keyID=%d): %v", apiKey.ID, err)
 		_ = h.DB.UpdateEmailStatus(logID, "failed", "", err.Error())
-		h.jsonError(w, "Failed to send: "+err.Error(), http.StatusInternalServerError)
+		h.jsonError(w, "Failed to send email", http.StatusInternalServerError)
 		return
 	}
 
@@ -81,25 +115,22 @@ func (h *Handler) APISend(w http.ResponseWriter, r *http.Request) {
 	})
 }
 
-// APIHealth handles GET /api/v1/health.
+// APIHealth handles GET /api/v1/health (public).
 func (h *Handler) APIHealth(w http.ResponseWriter, r *http.Request) {
+	if r.Method != http.MethodGet {
+		h.jsonError(w, "Method not allowed", http.StatusMethodNotAllowed)
+		return
+	}
 	services := config.CheckServices()
-	allUp := true
-	svcMap := make(map[string]bool)
+	svcMap := make(map[string]bool, len(services))
+	status := "ok"
 	for _, s := range services {
 		svcMap[s.Name] = s.Running
 		if !s.Running {
-			allUp = false
+			status = "degraded"
 		}
 	}
-
-	status := "ok"
-	if !allUp {
-		status = "degraded"
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(map[string]any{
+	h.jsonOK(w, map[string]any{
 		"status":   status,
 		"services": svcMap,
 	})
@@ -107,9 +138,14 @@ func (h *Handler) APIHealth(w http.ResponseWriter, r *http.Request) {
 
 // APIStatus handles GET /api/v1/status/:id.
 func (h *Handler) APIStatus(w http.ResponseWriter, r *http.Request) {
-	_, err := h.ValidateAPIKey(r)
+	apiKey, err := h.ValidateAPIKey(r)
 	if err != nil {
-		h.jsonError(w, err.Error(), http.StatusUnauthorized)
+		h.jsonError(w, "Unauthorized", http.StatusUnauthorized)
+		return
+	}
+	if h.APIKeyLimiter != nil && !h.APIKeyLimiter.Allow(apiKey.ID, apiKey.RateLimit) {
+		w.Header().Set("Retry-After", "60")
+		h.jsonError(w, "Rate limit exceeded", http.StatusTooManyRequests)
 		return
 	}
 
@@ -123,12 +159,13 @@ func (h *Handler) APIStatus(w http.ResponseWriter, r *http.Request) {
 		id = id*10 + int64(c-'0')
 	}
 
-	log, err := h.DB.GetEmailLog(id)
+	emailLog, err := h.DB.GetEmailLog(id)
 	if err != nil {
+		log.Printf("GetEmailLog(%d) failed: %v", id, err)
 		h.jsonError(w, "Email not found", http.StatusNotFound)
 		return
 	}
 
 	w.Header().Set("Content-Type", "application/json")
-	json.NewEncoder(w).Encode(log)
+	json.NewEncoder(w).Encode(emailLog)
 }

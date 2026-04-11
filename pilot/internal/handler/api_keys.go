@@ -6,6 +6,7 @@ import (
 	"encoding/hex"
 	"encoding/json"
 	"fmt"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -72,7 +73,8 @@ func (h *Handler) APICreateKey(w http.ResponseWriter, r *http.Request) {
 	keyHash := hex.EncodeToString(hash[:])
 
 	if err := h.DB.CreateAPIKey(req.Name, keyHash, keyPrefix, req.Permissions, req.RateLimit); err != nil {
-		h.jsonError(w, "Failed to save key: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("CreateAPIKey failed: %v", err)
+		h.jsonError(w, "Failed to save key", http.StatusInternalServerError)
 		return
 	}
 
@@ -103,8 +105,10 @@ func (h *Handler) APIRevokeKey(w http.ResponseWriter, r *http.Request) {
 	h.jsonOK(w, map[string]bool{"success": true})
 }
 
-// ValidateAPIKey checks an API key from request headers and returns the key ID.
-func (h *Handler) ValidateAPIKey(r *http.Request) (int64, error) {
+// ValidateAPIKey checks an API key from request headers and returns the
+// full key record on success. The caller uses the record's RateLimit field
+// to enforce per-key throttling.
+func (h *Handler) ValidateAPIKey(r *http.Request) (*database.APIKey, error) {
 	key := r.Header.Get("X-API-Key")
 	if key == "" {
 		bearer := r.Header.Get("Authorization")
@@ -113,7 +117,7 @@ func (h *Handler) ValidateAPIKey(r *http.Request) (int64, error) {
 		}
 	}
 	if key == "" {
-		return 0, fmt.Errorf("missing API key")
+		return nil, fmt.Errorf("missing API key")
 	}
 
 	hash := sha256.Sum256([]byte(key))
@@ -121,15 +125,16 @@ func (h *Handler) ValidateAPIKey(r *http.Request) (int64, error) {
 
 	apiKey, err := h.DB.GetAPIKeyByHash(keyHash)
 	if err != nil {
-		return 0, fmt.Errorf("invalid API key")
+		log.Printf("GetAPIKeyByHash failed: %v", err)
+		return nil, fmt.Errorf("invalid API key")
 	}
 	if apiKey == nil {
-		return 0, fmt.Errorf("invalid API key")
+		return nil, fmt.Errorf("invalid API key")
 	}
 	if apiKey.RevokedAt != nil {
-		return 0, fmt.Errorf("revoked API key")
+		return nil, fmt.Errorf("revoked API key")
 	}
 
 	_ = h.DB.IncrementAPIKeyUsage(apiKey.ID)
-	return apiKey.ID, nil
+	return apiKey, nil
 }

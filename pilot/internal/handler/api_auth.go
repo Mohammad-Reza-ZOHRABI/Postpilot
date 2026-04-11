@@ -4,6 +4,7 @@ import (
 	"encoding/base64"
 	"encoding/json"
 	"image/png"
+	"log"
 	"net/http"
 	"strings"
 	"time"
@@ -124,7 +125,8 @@ func (h *Handler) APISetup(w http.ResponseWriter, r *http.Request) {
 		}
 
 		if err := h.DB.CreateUser(email, hash, totpSecret, "admin"); err != nil {
-			h.jsonError(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
+			log.Printf("CreateUser (setup) failed: %v", err)
+			h.jsonError(w, "Failed to create user", http.StatusInternalServerError)
 			return
 		}
 

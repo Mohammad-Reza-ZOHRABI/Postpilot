@@ -46,8 +46,9 @@ func main() {
 	// Services
 	mailer := mail.NewClient(smtpHost, smtpPort)
 	limiter := auth.NewRateLimiter(5, 15*time.Minute)
+	apiKeyLimiter := auth.NewAPIKeyRateLimiter()
 
-	h := handler.New(db, jwtMgr, mailer, limiter)
+	h := handler.New(db, jwtMgr, mailer, limiter, apiKeyLimiter)
 
 	// Auth middleware for cookie-protected routes
 	requireAuth := auth.RequireAuthJSON(jwtMgr)

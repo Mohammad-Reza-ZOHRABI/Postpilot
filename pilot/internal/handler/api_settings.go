@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 
 	"github.com/Mohammad-Reza-ZOHRABI/Postpilot/pilot/internal/config"
@@ -65,7 +66,8 @@ func (h *Handler) APISaveSettings(w http.ResponseWriter, r *http.Request) {
 	// Apply settings to Postfix
 	settings, _ := h.DB.GetAllSettings()
 	if err := config.ApplySettings(settings); err != nil {
-		h.jsonError(w, "Settings saved but failed to apply: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("ApplySettings failed: %v", err)
+		h.jsonError(w, "Settings saved but failed to apply", http.StatusInternalServerError)
 		return
 	}
 

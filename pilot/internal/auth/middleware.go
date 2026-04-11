@@ -41,10 +41,25 @@ func RequireAuthJSON(jwtMgr *JWTManager) func(http.Handler) http.Handler {
 }
 
 // SecurityHeaders adds standard security headers to all responses.
+//
+// CSP: script-src is strictly 'self'. The Svelte UI does NOT emit inline
+// scripts. style-src keeps 'unsafe-inline' because Svelte/Vite output
+// contains inline style attributes. img-src allows data: for the TOTP QR
+// code which is embedded as a data URL.
 func SecurityHeaders(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		w.Header().Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
-		w.Header().Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data:")
+		w.Header().Set("Content-Security-Policy",
+			"default-src 'self'; "+
+				"script-src 'self'; "+
+				"style-src 'self' 'unsafe-inline'; "+
+				"img-src 'self' data:; "+
+				"connect-src 'self'; "+
+				"font-src 'self'; "+
+				"object-src 'none'; "+
+				"frame-ancestors 'none'; "+
+				"base-uri 'self'; "+
+				"form-action 'self'")
 		w.Header().Set("X-Content-Type-Options", "nosniff")
 		w.Header().Set("X-Frame-Options", "DENY")
 		w.Header().Set("Referrer-Policy", "strict-origin-when-cross-origin")
@@ -128,8 +143,82 @@ func (rl *RateLimiter) cleanup() {
 	}
 }
 
+// ---------------------------------------------------------------------------
+// Per-API-key rate limiter (sliding 1-minute window).
+// ---------------------------------------------------------------------------
+
+// apiKeyBucket tracks request counts within the current minute for one key.
+type apiKeyBucket struct {
+	count      int
+	windowEnds time.Time
+}
+
+// APIKeyRateLimiter enforces per-API-key request limits over a 1-minute
+// sliding window. The limit is configured per-key in the database (see
+// api_keys.rate_limit). This limiter is separate from the IP-based
+// RateLimiter used for login attempts.
+//
+// Storage is in-memory — limits reset across process restarts. For a
+// multi-process deployment, swap to a shared store (Redis) before scaling.
+type APIKeyRateLimiter struct {
+	mu      sync.Mutex
+	entries map[int64]*apiKeyBucket
+}
+
+// NewAPIKeyRateLimiter creates an APIKeyRateLimiter and starts its cleanup
+// goroutine.
+func NewAPIKeyRateLimiter() *APIKeyRateLimiter {
+	rl := &APIKeyRateLimiter{entries: make(map[int64]*apiKeyBucket)}
+	go rl.cleanup()
+	return rl
+}
+
+// Allow returns true if the given key is under its per-minute limit.
+// A limit of zero or less is treated as no limit (always allowed).
+func (rl *APIKeyRateLimiter) Allow(keyID int64, limit int) bool {
+	if limit <= 0 {
+		return true
+	}
+	rl.mu.Lock()
+	defer rl.mu.Unlock()
+
+	now := time.Now()
+	b, ok := rl.entries[keyID]
+	if !ok || now.After(b.windowEnds) {
+		rl.entries[keyID] = &apiKeyBucket{count: 1, windowEnds: now.Add(time.Minute)}
+		return true
+	}
+	b.count++
+	return b.count <= limit
+}
+
+func (rl *APIKeyRateLimiter) cleanup() {
+	ticker := time.NewTicker(5 * time.Minute)
+	defer ticker.Stop()
+	for range ticker.C {
+		rl.mu.Lock()
+		now := time.Now()
+		for id, b := range rl.entries {
+			if now.After(b.windowEnds) {
+				delete(rl.entries, id)
+			}
+		}
+		rl.mu.Unlock()
+	}
+}
+
+// ---------------------------------------------------------------------------
+// Client IP extraction.
+// ---------------------------------------------------------------------------
+
 // ClientIP extracts the client IP address from the request.
 // It checks X-Forwarded-For first, then falls back to RemoteAddr.
+//
+// SECURITY: X-Forwarded-For is trusted unconditionally. Postpilot MUST be
+// deployed behind a trusted reverse proxy (Traefik, nginx, Caddy) configured
+// to strip any client-supplied X-Forwarded-For and append only the real peer
+// IP. If Postpilot is exposed directly to the internet, rate limiting can be
+// bypassed by spoofing the header. See SECURITY.md → Deployment Checklist.
 func ClientIP(r *http.Request) string {
 	if xff := r.Header.Get("X-Forwarded-For"); xff != "" {
 		// X-Forwarded-For can contain multiple IPs; the first is the client

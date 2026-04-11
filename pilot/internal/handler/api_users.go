@@ -2,6 +2,7 @@ package handler
 
 import (
 	"encoding/json"
+	"log"
 	"net/http"
 	"strconv"
 	"strings"
@@ -91,7 +92,8 @@ func (h *Handler) APICreateUser(w http.ResponseWriter, r *http.Request) {
 	}
 
 	if err := h.DB.CreateUser(email, hash, secret, role); err != nil {
-		h.jsonError(w, "Failed to create user: "+err.Error(), http.StatusInternalServerError)
+		log.Printf("CreateUser failed: %v", err)
+		h.jsonError(w, "Failed to create user", http.StatusInternalServerError)
 		return
 	}
 
